@@ -16,6 +16,27 @@ import com.opus.music.ui.theme.OpusTheme
 import com.opus.music.ui.theme.ThemeController
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * While casting, the hardware volume buttons drive the SPEAKER's
+     * volume (via CastManager), not the phone's. Consumed here so the
+     * system volume doesn't also change underneath the cast session.
+     */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if ((event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP ||
+                event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) &&
+            com.opus.music.cast.CastManager.isCasting
+        ) {
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                val delta =
+                    if (event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) 5 else -5
+                com.opus.music.cast.CastManager.adjustCastVolume(delta)
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Install crash handler FIRST, before anything else.
         // Writes to app's external files dir (accessible via file manager, no permission needed).
@@ -47,6 +68,10 @@ class MainActivity : ComponentActivity() {
             }
             return
         }
+        // Keep any home-screen widgets in sync when the app opens.
+        try {
+            com.opus.music.widget.WidgetUpdater.refresh(this)
+        } catch (_: Exception) { }
         try {
             PlayerManager.connect(applicationContext)
         } catch (e: Throwable) {
@@ -63,13 +88,18 @@ class MainActivity : ComponentActivity() {
         // Seed the app-wide theme switch from saved preference (default: dark).
         try {
             ThemeController.init(Graph.settings.getThemeMode())
+            ThemeController.initDynamic(Graph.settings.isDynamicColor())
         } catch (_: Exception) {}
         // (Smart Offline Mix auto-sync is triggered from Nav() once the
         // session is restored, so it never races the login.)
         try {
             setContent {
                 val themeMode by ThemeController.mode.collectAsState()
-                OpusTheme(darkTheme = themeMode != ThemeController.LIGHT) {
+                val dynamicColor by ThemeController.dynamicColor.collectAsState()
+                OpusTheme(
+                    darkTheme = themeMode != ThemeController.LIGHT,
+                    dynamicColor = dynamicColor
+                ) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         Nav()
                     }
