@@ -5,7 +5,7 @@ Download all Maven dependencies (full transitive closure) for the Jazzy app.
 - Resolves POMs transitively (compile+runtime scopes, skips test/provided/optional).
 - Handles parent POMs, properties, dependencyManagement, BOM imports, version ranges.
 - Downloads AAR for Android library groups, JAR otherwise.
-- Saves to <project>/libs/<group>/<artifact>/<version>/<artifact>-<version>.<ext>
+- Saves to ~/workspace/jazzy/libs/<group>/<artifact>/<version>/<artifact>-<version>.<ext>
 - Idempotent: skips files that already exist.
 
 Usage: python3 download_deps.py
@@ -18,14 +18,15 @@ import subprocess
 import xml.etree.ElementTree as ET
 from collections import deque
 
-LIBS_DIR = os.environ.get("OUTRO_LIBS", os.path.join(os.environ.get("OUTRO_PROJECT", os.path.expanduser("~/workspace/outro")), "libs"))
-CACHE_DIR = os.environ.get("OUTRO_POMCACHE", os.path.join(os.environ.get("OUTRO_PROJECT", os.path.expanduser("~/workspace/outro")), "scripts", ".pomcache"))
+LIBS_DIR = os.path.expanduser("~/workspace/jazzy/libs")
+CACHE_DIR = os.path.expanduser("~/workspace/jazzy/scripts/.pomcache")
 GOOGLE = "https://dl.google.com/dl/android/maven2"
 CENTRAL = "https://repo1.maven.org/maven2"
 REPOS = [GOOGLE, CENTRAL]
 NS = {"m": "http://maven.apache.org/POM/4.0.0"}
 
-ANDROID_GROUP_PREFIXES = ("androidx.", "com.google.android.", "io.coil-kt")
+ANDROID_GROUP_PREFIXES = ("androidx.", "com.google.android.", "com.google.firebase",
+                         "com.google.accompanist", "io.coil-kt")
 
 os.makedirs(LIBS_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -376,6 +377,7 @@ def main():
         ("io.coil-kt", "coil-compose", "2.6.0"),
         ("com.google.zxing", "core", "3.5.3"),
         ("org.nanohttpd", "nanohttpd", "2.3.1"),
+        ("com.google.android.gms", "play-services-cast-framework", "21.4.0"),
         ("org.jetbrains.kotlin", "kotlin-stdlib", "2.0.20"),
     ]
     for g, a, v in direct:
@@ -424,9 +426,6 @@ def main():
           ("androidx.annotation", "annotation-jvm"))
     evict(("androidx.datastore", "datastore-core-jvm"),
           ("androidx.datastore", "datastore-core-android"))
-    evict(("androidx.lifecycle", "lifecycle-viewmodel-ktx"),
-          ("androidx.lifecycle", "lifecycle-viewmodel"),
-          ("androidx.lifecycle", "lifecycle-viewmodel-android"))
     evict(("com.google.guava", "listenablefuture"),
           ("com.google.guava", "guava"))
 
@@ -437,6 +436,40 @@ def main():
     # MutableLiveData), so exclusion is not an option.
     chosen[("androidx.lifecycle", "lifecycle-livedata-core")] = "2.7.0"
     log("Pinned androidx.lifecycle:lifecycle-livedata-core to 2.7.0 (D8 8.2.2 NPE on 2.8.3)")
+
+    # 3d2. Lifecycle 2.8.x split: the real viewmodel classes (incl.
+    # ViewModelKt/viewModelScope) live in lifecycle-viewmodel-android:2.8.3;
+    # the bare lifecycle-viewmodel:2.8.3 artifact is an empty stub. A stale
+    # 2.6.1 floor version elsewhere in the graph can win first-seen for the
+    # bare/lifecycle-viewmodel-ktx names, and those 2.6.1 AARs carry real
+    # classes that DUPLICATE the -android ones at dex time (29 + 1 dupes).
+    # Gradle resolves the -android variant; mirror that explicitly.
+    chosen[("androidx.lifecycle", "lifecycle-viewmodel-android")] = "2.8.3"
+    log("Pinned androidx.lifecycle:lifecycle-viewmodel-android to 2.8.3 (2.8.x split; stub bare artifact)")
+    for _old in [("androidx.lifecycle", "lifecycle-viewmodel"),
+                 ("androidx.lifecycle", "lifecycle-viewmodel-ktx")]:
+        if _old in chosen:
+            log(f"Evicting obsolete {_old[0]}:{_old[1]}:{chosen[_old]} "
+                f"(superseded by lifecycle-viewmodel-android:2.8.3)")
+            del chosen[_old]
+
+    # 3d. Repair versions stomped by the Cast SDK subtree's stale floor versions.
+    # play-services-cast-framework:21.4.0 declares androidx.appcompat:appcompat:1.0.0
+    # and mediarouter:1.6.0-beta01 declares appcompat:1.1.0 /
+    # appcompat-resources:1.2.0 / vectordrawable:1.0.0. This resolver is
+    # first-seen-wins (not Gradle's highest-wins), so those stale floors beat the
+    # newer versions the rest of the graph already uses. appcompat:1.0.0 still
+    # bundles AppCompatResources, so D8 fails with duplicate classes against any
+    # appcompat-resources. Restore the known-good versions from the pre-Cast graph.
+    for (g, a), v in [
+        (("androidx.appcompat", "appcompat"), "1.6.1"),
+        (("androidx.appcompat", "appcompat-resources"), "1.6.1"),
+        (("androidx.vectordrawable", "vectordrawable"), "1.1.0"),
+        (("androidx.vectordrawable", "vectordrawable-animated"), "1.1.0"),
+    ]:
+        if (g, a) in chosen:
+            log(f"Pinned {g}:{a} to {v} (was {chosen[(g, a)]}, stomped by Cast subtree)")
+            chosen[(g, a)] = v
 
     # 4. Download artifacts (AAR for Android groups, JAR otherwise).
     failures = []
