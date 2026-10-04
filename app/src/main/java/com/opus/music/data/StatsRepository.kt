@@ -2,6 +2,7 @@ package com.opus.music.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.opus.music.network.Song
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -26,6 +27,21 @@ data class MixCandidate(
 )
 
 /**
+ * Convert a cached metadata snapshot to a playable [Song]. The stream/download
+ * URLs are resolved lazily by PlayerManager from the song id, so a stub built
+ * from local stats is enough to queue and play.
+ */
+fun SongMeta.toSong() = Song(
+    id = id,
+    title = title,
+    artist = artist,
+    album = album,
+    coverArt = coverArt,
+    duration = duration,
+    suffix = suffix
+)
+
+/**
  * Local listening stats: per-song play counts plus metadata snapshots.
  * Backs Smart Offline Mix ("most played + favorites, auto-downloaded").
  */
@@ -36,6 +52,7 @@ class StatsRepository(context: Context) {
 
     private fun countKey(id: String) = "pc_$id"
     private fun metaKey(id: String) = "meta_$id"
+    private fun lastPlayedKey(id: String) = "lp_$id"
 
     /** Record one play of a song (call when a track has been listened to). */
     fun recordPlay(meta: SongMeta) {
@@ -44,6 +61,7 @@ class StatsRepository(context: Context) {
             prefs.edit()
                 .putInt(countKey(meta.id), n)
                 .putString(metaKey(meta.id), json.encodeToString(SongMeta.serializer(), meta))
+                .putLong(lastPlayedKey(meta.id), System.currentTimeMillis())
                 .apply()
         } catch (_: Exception) { }
     }
@@ -76,6 +94,28 @@ class StatsRepository(context: Context) {
     fun setLastMixSync(ts: Long) {
         try { prefs.edit().putLong("last_mix_sync", ts).apply() } catch (_: Exception) { }
     }
+
+    /** Most recently played songs, newest first. Backs "Jump Back In". */
+    fun recentlyPlayed(limit: Int): List<SongMeta> = try {
+        prefs.all.keys
+            .filter { it.startsWith("lp_") }
+            .mapNotNull { k ->
+                val id = k.removePrefix("lp_")
+                val ts = (prefs.all[k] as? Long) ?: 0L
+                val metaStr = prefs.getString(metaKey(id), null) ?: return@mapNotNull null
+                val meta = try {
+                    json.decodeFromString(SongMeta.serializer(), metaStr)
+                } catch (_: Exception) { return@mapNotNull null }
+                meta to ts
+            }
+            .sortedByDescending { it.second }
+            .take(limit.coerceAtLeast(1))
+            .map { it.first }
+    } catch (_: Exception) { emptyList() }
+
+    fun lastPlayedAt(id: String): Long = try {
+        prefs.getLong(lastPlayedKey(id), 0L)
+    } catch (_: Exception) { 0L }
 }
 
 /**
@@ -87,7 +127,7 @@ object OfflineMixSelector {
      * @param candidates play-count candidates (most-played first preferred)
      * @param starredIds ids the user starred on the server
      * @param downloadedIds ids already stored offline
-     * @param maxSize how many songs the mix may hold
+     * @param maxSize how many songs the mix may hold; negative = unlimited
      */
     fun selectMix(
         candidates: List<MixCandidate>,
@@ -95,9 +135,10 @@ object OfflineMixSelector {
         downloadedIds: Set<String>,
         maxSize: Int
     ): List<SongMeta> {
-        if (maxSize <= 0) return emptyList()
+        val unlimited = maxSize < 0
+        if (!unlimited && maxSize <= 0) return emptyList()
         val seen = LinkedHashSet<String>()
-        val out = ArrayList<SongMeta>(maxSize)
+        val out = ArrayList<SongMeta>(if (unlimited) candidates.size else maxSize)
         // Starred songs not already downloaded go first (explicit favorites win).
         val starredFirst = candidates
             .filter { it.meta.id in starredIds && it.meta.id !in downloadedIds }
@@ -113,7 +154,7 @@ object OfflineMixSelector {
                     .thenBy { it.meta.title.lowercase() }
             )
         for (c in starredFirst + rest) {
-            if (out.size >= maxSize) break
+            if (!unlimited && out.size >= maxSize) break
             if (seen.add(c.meta.id)) out.add(c.meta)
         }
         return out
