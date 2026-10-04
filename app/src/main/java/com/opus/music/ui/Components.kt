@@ -2,6 +2,8 @@ package com.opus.music.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,14 +46,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.opus.music.Graph
 import com.opus.music.Session
+import com.opus.music.data.SwipeActions
 import com.opus.music.network.Album
 import com.opus.music.network.Artist
 import com.opus.music.network.Playlist
@@ -58,6 +68,9 @@ import com.opus.music.network.Song
 import com.opus.music.player.PlayerManager
 import com.opus.music.ui.vm.PlayerViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /** Bumped whenever the offline set changes so rows refresh their download state. */
@@ -160,8 +173,96 @@ fun EmptyBox(text: String) {
     }
 }
 
+/**
+ * Song row with configurable horizontal swipe actions (settings → Swipe).
+ * Same public signature as before; the inner content is unchanged.
+ */
 @Composable
 fun SongRow(
+    song: Song,
+    onClick: () -> Unit,
+    onGoAlbum: (() -> Unit)? = null,
+    onGoArtist: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val haptics = LocalHapticFeedback.current
+    val client = Session.client
+    val downloaded = rememberIsDownloaded(song.id)
+    var offsetX by remember(song.id) { mutableStateOf(0f) }
+    val maxSwipe = with(density) { 120.dp.toPx() }
+    val threshold = with(density) { 64.dp.toPx() }
+    val leftAction = Graph.settings.getSwipeAction(SwipeActions.KEY_SONG_LEFT)
+    val rightAction = Graph.settings.getSwipeAction(SwipeActions.KEY_SONG_RIGHT)
+
+    fun fire(action: String) {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        when (action) {
+            SwipeActions.PLAY_NEXT -> PlayerManager.playNext(song, Graph.downloads)
+            SwipeActions.ADD_TO_QUEUE -> PlayerManager.addToQueue(song, Graph.downloads)
+            SwipeActions.DOWNLOAD -> scope.launch {
+                try {
+                    if (downloaded) Graph.downloads.delete(song.id)
+                    else client?.let { Graph.downloads.download(song, it.streamUrl(song.id)) }
+                    DownloadEvents.bump()
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
+    Box(modifier.fillMaxWidth()) {
+        // Reveal layer: shows the pending action while dragging.
+        if (offsetX != 0f) {
+            val pending = if (offsetX < 0f) leftAction else rightAction
+            val armed = abs(offsetX) >= threshold && pending != SwipeActions.NONE
+            Box(
+                Modifier.matchParentSize()
+                    .background(
+                        if (armed) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    .padding(horizontal = 24.dp),
+                contentAlignment = if (offsetX < 0f) Alignment.CenterEnd else Alignment.CenterStart
+            ) {
+                Text(
+                    SwipeActions.label(pending),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (armed) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Box(
+            Modifier.fillMaxWidth()
+                .offset { IntOffset(offsetX.roundToInt(), 0) }
+                .pointerInput(song.id) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val key =
+                                if (offsetX < 0f) SwipeActions.KEY_SONG_LEFT
+                                else SwipeActions.KEY_SONG_RIGHT
+                            val action = Graph.settings.getSwipeAction(key)
+                            if (abs(offsetX) >= threshold && action != SwipeActions.NONE) {
+                                fire(action)
+                            }
+                            offsetX = 0f
+                        },
+                        onDragCancel = { offsetX = 0f }
+                    ) { change, dragAmount ->
+                        offsetX = (offsetX + dragAmount).coerceIn(-maxSwipe, maxSwipe)
+                        change.consume()
+                    }
+                }
+        ) {
+            SongRowContent(song, onClick, onGoAlbum, onGoArtist)
+        }
+    }
+}
+
+@Composable
+private fun SongRowContent(
     song: Song,
     onClick: () -> Unit,
     onGoAlbum: (() -> Unit)? = null,
@@ -279,7 +380,53 @@ fun MiniPlayer(onTap: () -> Unit) {
     val ui by vm.uiState.collectAsState()
     if (!ui.connected || ui.title.isEmpty()) return
 
-    Surface(onClick = onTap, tonalElevation = 6.dp) {
+    val density = LocalDensity.current
+    val haptics = LocalHapticFeedback.current
+    val threshold = with(density) { 48.dp.toPx() }
+
+    fun fireMini(action: String) {
+        when (action) {
+            SwipeActions.OPEN_PLAYER -> onTap()
+            SwipeActions.PLAY_PAUSE -> PlayerManager.togglePlayPause()
+            SwipeActions.NEXT -> PlayerManager.next()
+            SwipeActions.PREVIOUS -> PlayerManager.previous()
+        }
+    }
+
+    // Tap still opens the player (Surface onClick); drags fire the
+    // configured swipe actions without triggering the tap.
+    Surface(
+        onClick = onTap,
+        tonalElevation = 6.dp,
+        modifier = Modifier.pointerInput(Unit) {
+            var total = Offset.Zero
+            detectDragGestures(
+                onDragStart = { total = Offset.Zero },
+                onDragEnd = {
+                    val dx = total.x
+                    val dy = total.y
+                    val key = when {
+                        abs(dy) >= threshold && abs(dy) > abs(dx) ->
+                            if (dy < 0) SwipeActions.KEY_MINI_UP else SwipeActions.KEY_MINI_DOWN
+                        abs(dx) >= threshold && abs(dx) > abs(dy) ->
+                            if (dx < 0) SwipeActions.KEY_MINI_LEFT else SwipeActions.KEY_MINI_RIGHT
+                        else -> null
+                    }
+                    if (key != null) {
+                        val action = Graph.settings.getSwipeAction(key)
+                        if (action != SwipeActions.NONE) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            fireMini(action)
+                        }
+                    }
+                },
+                onDragCancel = { }
+            ) { change, dragAmount ->
+                change.consume()
+                total += dragAmount
+            }
+        }
+    ) {
         Column {
             Row(
                 Modifier.fillMaxWidth().height(64.dp).padding(start = 12.dp, end = 4.dp),
