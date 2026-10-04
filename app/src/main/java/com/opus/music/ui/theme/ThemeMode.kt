@@ -15,12 +15,23 @@ object ThemeController {
     private val _mode = MutableStateFlow(DARK)
     val mode: StateFlow<String> = _mode
 
+    private val _dynamicColor = MutableStateFlow(false)
+    val dynamicColor: StateFlow<Boolean> = _dynamicColor
+
     fun init(mode: String) {
         _mode.value = if (mode == LIGHT) LIGHT else DARK
     }
 
+    fun initDynamic(v: Boolean) {
+        _dynamicColor.value = v
+    }
+
     fun set(mode: String) {
         _mode.value = if (mode == LIGHT) LIGHT else DARK
+    }
+
+    fun setDynamic(v: Boolean) {
+        _dynamicColor.value = v
     }
 
     fun label(mode: String): String = if (mode == LIGHT) "Light" else "Dark"
