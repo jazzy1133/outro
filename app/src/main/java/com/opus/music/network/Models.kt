@@ -23,7 +23,16 @@ data class Payload(
     val searchResult3: SearchResult3? = null,
     val randomSongs: RandomSongs? = null,
     val starred: Starred? = null,
-    val user: SubsonicUser? = null
+    val user: SubsonicUser? = null,
+    // Phase 4: library smarts
+    val lyrics: LyricsResult? = null,
+    val artistInfo2: ArtistInfo2? = null,
+    val internetRadioStations: InternetRadioStations? = null,
+    val bookmarks: BookmarksContainer? = null,
+    val similarSongs2: SimilarSongs2? = null,
+    val songsByGenre: SongsByGenre? = null,
+    val genres: Genres? = null,
+    val playQueue: PlayQueueState? = null
 )
 
 @Serializable
@@ -142,3 +151,76 @@ data class Starred(
 
 @Serializable
 data class SubsonicUser(val username: String = "")
+
+// ---- Phase 4: library smarts ----
+
+/** getLyrics.view: Subsonic puts the lyric text in the element's text content,
+ *  which its JSON mapping exposes as "value". */
+@Serializable
+data class LyricsResult(
+    val artist: String? = null,
+    val title: String? = null,
+    val value: String? = null
+)
+
+/** getArtistInfo2.view. Only populated when the server has an external
+ *  metadata integration (e.g. Last.fm on Navidrome). */
+@Serializable
+data class ArtistInfo2(
+    val biography: String? = null,
+    val musicBrainzId: String? = null,
+    val lastFmUrl: String? = null,
+    val smallImageUrl: String? = null,
+    val mediumImageUrl: String? = null,
+    val largeImageUrl: String? = null,
+    val similarArtist: List<Artist> = emptyList()
+)
+
+@Serializable
+data class InternetRadioStations(
+    val internetRadioStation: List<InternetRadioStation> = emptyList()
+)
+
+@Serializable
+data class InternetRadioStation(
+    val id: String = "",
+    val name: String = "",
+    val streamUrl: String = "",
+    val homePageUrl: String? = null
+)
+
+@Serializable
+data class BookmarksContainer(val bookmark: List<BookmarkEntry> = emptyList())
+
+/** A server-side resume point / user bookmark on a media item. */
+@Serializable
+data class BookmarkEntry(
+    val position: Long = 0,
+    val comment: String? = null,
+    val created: String? = null,
+    val changed: String? = null,
+    val entry: Song? = null
+)
+
+@Serializable
+data class SimilarSongs2(val song: List<Song> = emptyList())
+
+@Serializable
+data class SongsByGenre(val song: List<Song> = emptyList())
+
+@Serializable
+data class Genres(val genre: List<GenreEntry> = emptyList())
+
+@Serializable
+data class GenreEntry(
+    val name: String = "",
+    val songCount: Int = 0,
+    val albumCount: Int = 0
+)
+
+@Serializable
+data class PlayQueueState(
+    val current: String? = null,
+    val position: Long = 0,
+    val entry: List<Song> = emptyList()
+)
