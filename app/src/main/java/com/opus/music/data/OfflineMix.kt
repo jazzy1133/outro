@@ -54,8 +54,10 @@ object OfflineMix {
                 return@withContext SyncResult(0, 0, "waiting for wi-fi")
 
             try {
-                val maxSize = settings.getOfflineMixSize().coerceIn(10, 200)
-                val candidates = stats.topPlayed(300)
+                // MIX_UNLIMITED (-1) means: take every mix candidate available.
+                val maxSize = settings.getOfflineMixSize()
+                val limited = maxSize != SettingsRepository.MIX_UNLIMITED
+                val candidates = stats.topPlayed(if (limited) 300 else Int.MAX_VALUE)
                 // One server call: fold starred songs into the candidates so
                 // pure favorites with no local plays still make the mix.
                 val starredSongs = try {
