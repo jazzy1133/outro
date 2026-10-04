@@ -19,6 +19,10 @@ import kotlinx.coroutines.launch
 /** Holder so PlayerManager can reach the engine created in PlayerService. */
 object EngineHolder {
     @Volatile var crossfade: CrossfadeEngine? = null
+    @Volatile var eq: EqualizerEngine.Controller? = null
+    @Volatile var boost: VolumeBoostController? = null
+    @Volatile var compressor: CompressorController? = null
+    @Volatile var exoPlayer: ExoPlayer? = null
 }
 
 /**
