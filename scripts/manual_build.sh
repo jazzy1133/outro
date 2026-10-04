@@ -3,20 +3,19 @@
 # Requires: JDK 17, Android SDK, kotlin-compiler-embeddable 2.1.0, dependencies in libs/
 set -euo pipefail
 
-export JAVA_HOME="${JAVA_HOME:-$HOME/jdk/jdk-17.0.20.1+1}"
+export JAVA_HOME=/home/hatch/jdk/jdk-17.0.20.1+1
 export PATH=$JAVA_HOME/bin:$PATH
 
-# Override with OUTRO_PROJECT env var if your checkout lives elsewhere.
-PROJECT="${OUTRO_PROJECT:-$HOME/workspace/outro}"
+PROJECT=~/workspace/jazzy
 LIBS=$PROJECT/libs
 BUILD=$PROJECT/build-manual
-ANDROID_SDK="${ANDROID_SDK:-$HOME/android-sdk}"
+ANDROID_SDK=~/android-sdk
 PLATFORM=$ANDROID_SDK/platforms/android-34/android.jar
 BUILD_TOOLS=$ANDROID_SDK/build-tools/34.0.0
 # Kotlin 2.1.0 via kotlin-compiler-embeddable (has org.jetbrains.kotlin.com.intellij shading
 # that the Compose compiler plugin requires; the standalone kotlinc dist does not).
-K2_LIB="${KOTLINC_HOME:-$HOME/kotlinc/kotlin-2.1.0/kotlinc}/lib"
-EMBED_JAR="${KOTLIN_EMBED_JAR:-$HOME/kplugins/embed/kotlin-compiler-embeddable-2.1.0.jar}"
+K2_LIB=~/kotlinc/kotlin-2.1.0/kotlinc/lib
+EMBED_JAR=~/kplugins/embed/kotlin-compiler-embeddable-2.1.0.jar
 RUNCP="$EMBED_JAR:$K2_LIB/kotlin-stdlib.jar:$K2_LIB/kotlinx-coroutines-core-jvm.jar:$K2_LIB/trove4j.jar:$K2_LIB/annotations-13.0.jar:$K2_LIB/kotlin-reflect.jar:$K2_LIB/kotlin-script-runtime.jar"
 KOTLINC="java -cp $RUNCP org.jetbrains.kotlin.cli.jvm.K2JVMCompiler"
 
@@ -60,8 +59,8 @@ echo "Classpath entries: $(echo $CP | tr ':' '\n' | wc -l)"
 echo "=== Step 3: Compile Kotlin sources ==="
 # Compose plugin for Kotlin 2.1.0 (K2-native CompilerPluginRegistrar) via -Xplugin.
 # Serialization plugin from the 2.1.0 dist via -Xplugin.
-COMPOSE_PLUGIN="${COMPOSE_PLUGIN:-$HOME/kplugins/kotlin-compose-compiler-plugin-embeddable-2.1.0.jar}"
-SERIAL_PLUGIN="${SERIAL_PLUGIN:-$K2_LIB/kotlin-serialization-compiler-plugin.jar}"
+COMPOSE_PLUGIN=~/kplugins/kotlin-compose-compiler-plugin-embeddable-2.1.0.jar
+SERIAL_PLUGIN=~/kotlinc/kotlin-2.1.0/kotlinc/lib/kotlin-serialization-compiler-plugin.jar
 
 PLUGIN_ARGS="-Xplugin=$COMPOSE_PLUGIN -Xplugin=$SERIAL_PLUGIN"
 echo "Using compose plugin: $COMPOSE_PLUGIN"
@@ -103,9 +102,9 @@ echo "Deduplicating AAR resources..."
 python3 << 'PYEOF'
 import os, re, shutil
 
-build = os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'build-manual')
+build = '/home/hatch/workspace/jazzy/build-manual'
 aar_base = os.path.join(build, 'aar-extract')
-app_res = os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'app/src/main/res')
+app_res = '/home/hatch/workspace/jazzy/app/src/main/res'
 dedup_base = os.path.join(build, 'aar-res-dedup')
 shutil.rmtree(dedup_base, ignore_errors=True)
 os.makedirs(dedup_base, exist_ok=True)
@@ -228,8 +227,8 @@ mkdir -p $BUILD/r-lib-src
 python3 << 'PYEOF'
 import os, re, glob
 
-aar_extract = os.environ.get('AAR_EXTRACT_DIR', os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'build-manual', 'aar-extract'))
-out_base = os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'build-manual', 'r-lib-src')
+aar_extract = os.environ.get('AAR_EXTRACT_DIR', '/home/hatch/workspace/jazzy/build-manual/aar-extract')
+out_base = '/home/hatch/workspace/jazzy/build-manual/r-lib-src'
 
 # All libraries now get real compiled resources above, so NONE need synthetic R.
 # Their R classes are generated with real IDs from aapt2's link output below.
@@ -302,8 +301,8 @@ $BUILD_TOOLS/aapt2 link \
   --rename-manifest-package com.opus.music \
   --min-sdk-version 26 \
   --target-sdk-version 34 \
-  --version-code 10 \
-  --version-name "1.0.9" \
+  --version-code 23 \
+  --version-name "1.3.4" \
   $BUILD/res-out/*.flat $UI_RES_FLATS
 
 # Fix: Generate material3 R with REAL IDs from aapt2's output.
@@ -313,7 +312,7 @@ python3 << 'PYEOF'
 import os, re
 
 # Parse app's R.java for real IDs
-app_r = os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'build-manual', 'r-src', 'com', 'opus', 'music', 'R.java')
+app_r = '/home/hatch/workspace/jazzy/build-manual/r-src/com/opus/music/R.java'
 id_map = {}
 with open(app_r) as f:
     content = f.read()
@@ -325,7 +324,7 @@ with open(app_r) as f:
 # from the app's R (aapt2 link output). Package name comes from each AAR's manifest.
 import re as _re
 import glob as _glob2
-for _aardir in _glob2.glob(os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'build-manual', 'aar-extract', '*')):
+for _aardir in _glob2.glob('/home/hatch/workspace/jazzy/build-manual/aar-extract/*'):
     _libname = os.path.basename(_aardir.rstrip('/'))
     _manifest = os.path.join(_aardir, 'AndroidManifest.xml')
     _r_txt = os.path.join(_aardir, 'R.txt')
@@ -352,7 +351,7 @@ for _aardir in _glob2.glob(os.path.join(os.environ.get('OUTRO_PROJECT', os.path.
         continue
     if not _resources:
         continue
-    _out_dir = os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'build-manual', 'r-lib-src', _pkg.replace('.', '/')
+    _out_dir = '/home/hatch/workspace/jazzy/build-manual/r-lib-src/' + _pkg.replace('.', '/')
     os.makedirs(_out_dir, exist_ok=True)
     with open(os.path.join(_out_dir, 'R.java'), 'w') as f:
         f.write(f'package {_pkg};\n\npublic final class R {{\n')
@@ -369,7 +368,7 @@ for _aardir in _glob2.glob(os.path.join(os.environ.get('OUTRO_PROJECT', os.path.
 print(f"Generated real-ID R classes for all AAR libraries")
 # Legacy single-lib block below kept for reference; replaced by loop above.
 if False:
-    r_txt = os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'build-manual', 'aar-extract', 'material3-android-1.3.0', 'R.txt')
+    r_txt = '/home/hatch/workspace/jazzy/build-manual/aar-extract/material3-android-1.3.0/R.txt'
     resources = {}
     with open(r_txt) as f:
         for line in f:
@@ -378,7 +377,7 @@ if False:
                 rtype, name = parts[1], parts[2]
                 real_id = id_map.get(name, '0x0')
                 resources.setdefault(rtype, []).append((name, real_id))
-    out_dir = os.path.join(os.environ.get('OUTRO_PROJECT', os.path.expanduser('~/workspace/outro')), 'build-manual', 'r-lib-src', 'androidx', 'compose', 'material3')
+    out_dir = '/home/hatch/workspace/jazzy/build-manual/r-lib-src/androidx/compose/material3'
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, 'R.java'), 'w') as f:
         f.write('package androidx.compose.material3;\n\npublic final class R {\n')
@@ -391,10 +390,12 @@ if False:
     print(f"Generated material3 R with {sum(len(v) for v in resources.values())} resources")
 PYEOF
 
-# Compile R.java (app + library R classes)
+# Compile R.java (app + library R classes). aapt2 emits R.java as UTF-8
+# (resource comments can contain non-ASCII chars), so javac must read it
+# as UTF-8 rather than the platform default.
 find $BUILD/r-src -name "*.java" > $BUILD/r-java.txt
 find $BUILD/r-lib-src -name "*.java" >> $BUILD/r-java.txt 2>/dev/null || true
-$JAVA_HOME/bin/javac -cp "$CP" -d $BUILD/classes @$BUILD/r-java.txt 2>&1 | head -20 || true
+$JAVA_HOME/bin/javac -encoding UTF-8 -cp "$CP" -d $BUILD/classes @$BUILD/r-java.txt 2>&1 | head -20 || true
 
 echo "=== Step 6: Dex with d8 ==="
 # Jar up our compiled classes first (d8 cannot take a raw classes dir)
