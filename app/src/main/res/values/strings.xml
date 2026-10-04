@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Outro</string>
+    <string name="widget_description">Outro playback controls: current track with play, pause, and skip buttons.</string>
     <string name="default_notification_channel_name">Now playing</string>
     <string name="error_message_authentication_expired">Sign in to use this app</string>
     <string name="error_message_bad_value">Incorrect input data</string>
