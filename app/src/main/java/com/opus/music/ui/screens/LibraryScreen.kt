@@ -1,16 +1,26 @@
 package com.opus.music.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
@@ -24,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -57,6 +68,33 @@ fun LibraryScreen(nav: NavController) {
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            // Smart mixes + radio shortcuts.
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                LibraryShortcut(
+                    title = "Mixes",
+                    subtitle = "Made for you",
+                    icon = Icons.Filled.AutoAwesome,
+                    modifier = Modifier.weight(1f),
+                    onClick = { nav.navigate(Routes.MIXES) }
+                )
+                LibraryShortcut(
+                    title = "Radio",
+                    subtitle = "Internet stations",
+                    icon = Icons.Filled.Radio,
+                    modifier = Modifier.weight(1f),
+                    onClick = { nav.navigate(Routes.RADIO) }
+                )
+                LibraryShortcut(
+                    title = "Genres",
+                    subtitle = "Browse by style",
+                    icon = Icons.Filled.Category,
+                    modifier = Modifier.weight(1f),
+                    onClick = { nav.navigate(Routes.GENRES) }
+                )
+            }
             TabRow(selectedTabIndex = tab) {
                 tabs.forEachIndexed { i, label ->
                     Tab(selected = tab == i, onClick = { tab = i }, text = { Text(label) })
@@ -120,6 +158,43 @@ private fun <T> LibraryList(
                 else -> false
             }
             if (emptyList) EmptyBox(empty) else content(state.data)
+        }
+    }
+}
+
+@Composable
+private fun LibraryShortcut(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    androidx.compose.material3.Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+            }
         }
     }
 }
