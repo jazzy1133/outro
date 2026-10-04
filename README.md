@@ -2,7 +2,7 @@
 
 A modern Android music client for **Subsonic**-compatible servers ([Navidrome](https://www.navidrome.org/), Airsonic, Gonic, …).
 
-Dark or light themes, jazzy design. Apple Music-style polish. Smooth Jetpack Compose UI.
+Dark or light themes, jazzy design. Apple Music-style polish. Smooth Jetpack Compose UI. Now with **Android Auto** for the car and **casting to your speakers** — AirPlay 2 (HomePod, Apple TV), Chromecast, and Sonos/DLNA.
 
 > Built and tested on a real device (Android 13), but **it may not be stable on all devices**. Bug reports, fixes, and improvements from the community are very welcome — that's why it's here.
 
@@ -10,9 +10,16 @@ Dark or light themes, jazzy design. Apple Music-style polish. Smooth Jetpack Com
 
 ## Features
 
+- **Android Auto** — browse and play your server library from the car
+- **Speaker casting** — AirPlay 2 to HomePod & Apple TV with seek and volume control, classic AirPlay (RAOP) fallback, Chromecast, and Sonos/DLNA
 - **Full library browsing** — artists, albums, songs, genres, search
 - **Dark and Light themes** — the classic jazzy dark look or a clean white theme, switchable in Settings
 - **Now Playing** with queue management, shuffle, repeat
+- **Synced lyrics** with tap-to-seek
+- **Vertical mixer-style EQ** with preset chips, AutoEQ headphone profiles, compressor, volume boost, and skip silence
+- **Audiobook mode** — playback speed, resume points, and bookmarks
+- **Internet radio**
+- **Home-screen widget**
 - **Smart Offline Mix** — auto-downloads your starred and most-played songs over Wi-Fi (25/50/100 songs, Wi-Fi-only option)
 - **Party Queue** 🎉 — host a local Wi-Fi session; guests join via QR code, search the library, add songs, and vote. Host keeps playback control.
 - **Smart Sleep Fade** — sleep timer with gradual volume fade (1/3/5/10 min), optional stop-at-end-of-track
@@ -78,13 +85,13 @@ The APK is signed with a **debug key** by default. For release builds, generate 
 - Tested primarily on one device (Oppo A96, Android 13). Other devices/OEM skins may behave differently — please report what you find.
 - Party Queue needs a real Wi-Fi network; guest routers with client isolation will block it.
 - Crossfade and sleep-fade timing can vary with buffering and audio focus; real-device feedback wanted.
-- Equalizer and swipe-action settings are placeholders ("coming soon").
+- Casting is the newest feature area — AirPlay 2 is verified against HomePod mini and Apple TV; Chromecast and Sonos/DLNA reports from other devices are especially welcome.
 
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Good first areas: device-compatibility fixes, real-device testing reports, equalizer implementation, and Gradle build migration.
+Good first areas: device-compatibility fixes, real-device testing reports (especially Android Auto head units and cast targets), and Gradle build migration.
 
 ## License
 
