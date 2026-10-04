@@ -28,20 +28,31 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.opus.music.Graph
+import com.opus.music.data.toSong
 import com.opus.music.network.Album
+import com.opus.music.network.Artist
 import com.opus.music.player.PlayerManager
 import com.opus.music.ui.CoverArt
 import com.opus.music.ui.EmptyBox
 import com.opus.music.ui.ErrorBox
 import com.opus.music.ui.LoadingBox
 import com.opus.music.ui.Routes
+import com.opus.music.ui.SectionHeader
 import com.opus.music.Session
 import com.opus.music.ui.SongRow
 import com.opus.music.ui.formatDuration
@@ -93,6 +104,8 @@ fun ArtistScreen(id: String, nav: NavController) {
                     if (artist.album.isEmpty()) {
                         item { EmptyBox("No albums found for this artist.") }
                     } else {
+                        item { ArtistBioSection(id, nav) }
+                        item { ArtistTopSongs(artist.name, nav) }
                         items(artist.album) { album ->
                             AlbumListRow(album) { nav.navigate(Routes.album(album.id)) }
                         }
@@ -104,9 +117,35 @@ fun ArtistScreen(id: String, nav: NavController) {
     }
 }
 
+/**
+ * "Your top songs" for this artist, from on-device listening stats. Free to
+ * compute (no extra server calls) and personal: it only appears once the
+ * user has actually played this artist's songs.
+ */
 @Composable
-private fun AlbumListRow(album: Album, onClick: () -> Unit) {
-    Row(
+private fun ArtistTopSongs(artistName: String, nav: NavController) {
+    val songs = remember(artistName) {
+        Graph.stats.topPlayed(300)
+            .map { it.meta }
+            .filter { it.artist.equals(artistName, ignoreCase = true) }
+            .take(5)
+            .map { it.toSong() }
+    }
+    if (songs.isEmpty()) return
+    Column(Modifier.padding(vertical = 4.dp)) {
+        SectionHeader("Your top songs")
+        songs.forEachIndexed { index, song ->
+            SongRow(
+                song = song,
+                onClick = { PlayerManager.playSongs(songs, index, Graph.downloads) },
+                onGoAlbum = song.albumId?.let { aid -> { nav.navigate(Routes.album(aid)) } }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumListRow(album: Album, onClick: () -> Unit) {    Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -253,6 +292,95 @@ fun PlaylistScreen(id: String, nav: NavController) {
                     item { Spacer(Modifier.height(24.dp)) }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Artist biography + similar artists (getArtistInfo2). Only shown when the
+ * server actually returns a bio (Navidrome needs its Last.fm integration).
+ */
+@Composable
+private fun ArtistBioSection(artistId: String, nav: NavController) {
+    var bio by remember(artistId) { mutableStateOf<String?>(null) }
+    var similar by remember(artistId) { mutableStateOf<List<Artist>>(emptyList()) }
+    var expanded by remember(artistId) { mutableStateOf(false) }
+    var loaded by remember(artistId) { mutableStateOf(false) }
+
+    LaunchedEffect(artistId) {
+        try {
+            val info = withContext(Dispatchers.IO) {
+                Session.client?.api()?.getArtistInfo2(artistId)?.response?.artistInfo2
+            }
+            val raw = info?.biography?.trim().orEmpty()
+            // Last.fm bios end with "Read more on Last.fm" boilerplate.
+            bio = raw.substringBefore("Read more on Last.fm").trim()
+                .takeIf { it.length > 40 }
+            similar = info?.similarArtist.orEmpty().take(10)
+        } catch (_: Exception) { }
+        loaded = true
+    }
+
+    if (!loaded) return
+    if (bio.isNullOrBlank() && similar.isEmpty()) return
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        if (!bio.isNullOrBlank()) {
+            Text(
+                "About",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            Text(
+                bio!!,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (expanded) Int.MAX_VALUE else 4,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { expanded = !expanded }
+            )
+            Text(
+                if (expanded) "Show less" else "Read more",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { expanded = !expanded }
+                    .padding(vertical = 4.dp)
+            )
+        }
+        if (similar.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Similar artists",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                similar.take(5).forEach { a ->
+                    Column(
+                        Modifier.weight(1f).clickable { nav.navigate(Routes.artist(a.id)) },
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CoverArt(
+                            Session.client?.coverArtUrl(a.coverArt, 200),
+                            64.dp, 32.dp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            a.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
