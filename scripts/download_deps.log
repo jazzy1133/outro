@@ -1,0 +1,4 @@
+== Jazzy dependency downloader ==
+Fetching BOM androidx.compose:compose-bom:2024.06.00 ...
+BOM versions: ui=1.6.8, material3=1.2.1
+Resolved 133 artifacts (transitive closure).
